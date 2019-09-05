@@ -50,6 +50,7 @@ class BaseNetwork(object):
 
     with Timer('Initializing the network (including pretrained vocab)'):
       self._config = config
+      self._use_elmo = False
       #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
       self._input_networks = input_networks
@@ -77,6 +78,14 @@ class BaseNetwork(object):
         else:
           VocabClass = getattr(vocabs, input_vocab_classname)
           vocab = VocabClass(config=config)
+          if input_vocab_classname == 'FormMultivocab':
+            #print ("pretrained_vocab", vocab.use_pretrained_vocab)
+            if vocab.use_pretrained_vocab:
+              self._use_pretrained = True
+              self.pretrained_vocabs = vocab._pretrained_vocabs
+            if vocab.use_elmo_vocab:
+              self._use_elmo = True
+              self.elmo_vocabs = vocab._elmo_vocabs
           vocab.load() or vocab.count(self.train_conllus)
           self._input_vocabs.append(vocab)
           extant_vocabs[input_vocab_classname] = vocab
@@ -116,8 +125,7 @@ class BaseNetwork(object):
                                              config=self._config)
     devset = conllu_dataset.CoNLLUDevset(self.vocabs,
                                          config=self._config)
-    testset = conllu_dataset.CoNLLUTestset(self.vocabs,
-                                           config=self._config)
+    #testset = conllu_dataset.CoNLLUTestset(self.vocabs, config=self._config)
 
     factored_deptree = None
     factored_semgraph = None
@@ -168,130 +176,26 @@ class BaseNetwork(object):
     with tf.Session(config=config) as sess:
       for saver, path in zip(input_network_savers, input_network_paths):
         saver.restore(sess, path)
-      sess.run(tf.global_variables_initializer())
+      feed_dict = {}
+      if self.use_elmo:
+        feed_dict[self.elmo_vocabs[0].embed_placeholder] = self.elmo_vocabs[0].embeddings
+      if self.use_pretrained:
+        feed_dict[self.pretrained_vocabs[0].embed_placeholder] = self.pretrained_vocabs[0].embeddings
+        #print ('elmo vocabs:',self.elmo_vocabs)
+        #sess.run(tf.global_variables_initializer())
+        #sess.run(tf.global_variables_initializer(), 
+        #  feed_dict={self.pretrained_vocabs[0].embed_placeholder:self.embed_placeholder[0].embeddings,
+        #  self.elmo_vocabs[0].embed_placeholder:self.elmo_vocabs[0].embeddings})
+      #else:
+      sess.run(tf.global_variables_initializer(), feed_dict=feed_dict)
       #---
       os.makedirs(os.path.join(self.save_dir, 'profile'))
       options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
       run_metadata = tf.RunMetadata()
       #---
       if not noscreen:
-        #---------------------------------------------------------
-        def run(stdscr):
-          current_optimizer = 'Adam'
-          train_tensors = adam_train_tensors
-          current_step = 0
-          curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
-          curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
-          curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-          curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
-          curses.init_pair(5, curses.COLOR_CYAN, curses.COLOR_BLACK)
-          curses.init_pair(6, curses.COLOR_BLUE, curses.COLOR_BLACK)
-          curses.init_pair(7, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('{}\n'.format(self.save_dir), curses.A_STANDOUT)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('GPU: {}\n'.format(self.cuda_visible_devices), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('Current optimizer: {}\n'.format(current_optimizer), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('Epoch: {:3d}'.format(0), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.addstr(' | ')
-          stdscr.addstr('Step: {:5d}\n'.format(0), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('Moving acc: {:5.2f}'.format(0.), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.addstr(' | ')
-          stdscr.addstr('Best moving acc: {:5.2f}\n'.format(0.), curses.color_pair(1) | curses.A_BOLD)
-          stdscr.clrtoeol()
-          stdscr.addstr('\t')
-          stdscr.addstr('Steps since improvement: {:4d}\n'.format(0),  curses.color_pair(1) | curses.A_BOLD)
-          stdscr.clrtoeol()
-          stdscr.move(2,0)
-          stdscr.refresh()
-          try:
-            current_epoch = 0
-            best_accuracy = 0
-            current_accuracy = 0
-            steps_since_best = 0
-            while (not self.max_steps or current_step < self.max_steps) and \
-                  (not self.max_steps_without_improvement or steps_since_best < self.max_steps_without_improvement) and \
-                  (not self.n_passes or current_epoch < len(trainset.conllu_files)*self.n_passes):
-              if steps_since_best >= 1 and self.switch_optimizers:
-                train_tensors = amsgrad_train_tensors
-                current_optimizer = 'AMSGrad'
-              for batch in trainset.batch_iterator(shuffle=True):
-                train_outputs.restart_timer()
-                start_time = time.time()
-                feed_dict = trainset.set_placeholders(batch)
-                _, train_scores = sess.run(train_tensors, feed_dict=feed_dict)
-                train_outputs.update_history(train_scores)
-                current_step += 1
-                if current_step % self.print_every == 0:
-                  for batch in devset.batch_iterator(shuffle=False):
-                    dev_outputs.restart_timer()
-                    feed_dict = devset.set_placeholders(batch)
-                    dev_scores = sess.run(dev_tensors, feed_dict=feed_dict)
-                    dev_outputs.update_history(dev_scores)
-                  current_accuracy *= .5
-                  current_accuracy += .5*dev_outputs.get_current_accuracy()
-                  if current_accuracy >= best_accuracy:
-                    steps_since_best = 0
-                    best_accuracy = current_accuracy
-                    if self.save_model_after_improvement:
-                      saver.save(sess, os.path.join(self.save_dir, 'ckpt'), global_step=self.global_step, write_meta_graph=False)
-                    if self.parse_devset:
-                      self.parse_files(devset, dev_outputs, sess, print_time=False)
-                  else:
-                    steps_since_best += self.print_every
-                  current_epoch = sess.run(self.global_step)
-                  stdscr.addstr('\t')
-                  stdscr.addstr('Current optimizer: {}\n'.format(current_optimizer), curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.clrtoeol()
-                  stdscr.addstr('\t')
-                  stdscr.addstr('Epoch: {:3d}'.format(int(current_epoch)), curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.addstr(' | ')
-                  stdscr.addstr('Step: {:5d}\n'.format(int(current_step)), curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.clrtoeol()
-                  stdscr.addstr('\t')
-                  stdscr.addstr('Moving acc: {:5.2f}'.format(current_accuracy), curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.addstr(' | ')
-                  stdscr.addstr('Best moving acc: {:5.2f}\n'.format(best_accuracy), curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.clrtoeol()
-                  stdscr.addstr('\t')
-                  stdscr.addstr('Steps since improvement: {:4d}\n'.format(int(steps_since_best)),  curses.color_pair(1) | curses.A_BOLD)
-                  stdscr.clrtoeol()
-                  train_outputs.print_recent_history(stdscr)
-                  dev_outputs.print_recent_history(stdscr)
-                  print('')
-                  stdscr.move(2,0)
-                  stdscr.refresh()
-              current_epoch = sess.run(self.global_step)
-              sess.run(update_step)
-              trainset.load_next()
-            with open(os.path.join(self.save_dir, 'SUCCESS'), 'w') as f:
-              pass
-          except KeyboardInterrupt:
-            pass
-
-          line = 0
-          stdscr.move(line,0)
-          instr = stdscr.instr().rstrip()
-          while instr:
-            screen_output.append(instr)
-            line += 1
-            stdscr.move(line,0)
-            instr = stdscr.instr().rstrip()
-        #---------------------------------------------------------
-        curses.wrapper(run)
-
-        with open(os.path.join(self.save_dir, 'scores.txt'), 'wb') as f:
-          #f.write(b'\n'.join(screen_output).decode('utf-8'))
-          f.write(b'\n'.join(screen_output))
-        print(b'\n'.join(screen_output).decode('utf-8'))
+        print ("Removed")
+        exit(1)
       else:
         current_optimizer = 'Adam'
         train_tensors = adam_train_tensors
@@ -318,7 +222,7 @@ class BaseNetwork(object):
               start_time = time.time()
               feed_dict = trainset.set_placeholders(batch)
               #---
-              if current_step < 10:
+              if current_step < 1:
                 _, train_scores = sess.run(train_tensors, feed_dict=feed_dict, options=options, run_metadata=run_metadata)
                 fetched_timeline = timeline.Timeline(run_metadata.step_stats)
                 chrome_trace = fetched_timeline.generate_chrome_trace_format()
@@ -342,8 +246,6 @@ class BaseNetwork(object):
                   best_accuracy = current_accuracy
                   if self.save_model_after_improvement:
                     saver.save(sess, os.path.join(self.save_dir, 'ckpt'), global_step=self.global_step, write_meta_graph=False)
-                  if self.parse_devset:
-                    self.parse_files(devset, dev_outputs, sess, print_time=False)
                 else:
                   steps_since_best += self.print_every
                 current_epoch = sess.run(self.global_step)
@@ -402,13 +304,21 @@ class BaseNetwork(object):
     config.allow_soft_placement = True
     with tf.Session(config=config) as sess:
       with Timer('Initializing non_save variables'):
-        print(list(non_save_variables))
-        sess.run(tf.variables_initializer(list(non_save_variables)))
+        #print(list(non_save_variables))
+        feed_dict = {}
+      if self.use_elmo:
+        feed_dict[self.elmo_vocabs[0].embed_placeholder] = self.elmo_vocabs[0].embeddings
+      if self.use_pretrained:
+        feed_dict[self.pretrained_vocabs[0].embed_placeholder] = self.pretrained_vocabs[0].embeddings
+      sess.run(tf.global_variables_initializer(), feed_dict=feed_dict)
       with Timer('Restoring save variables'):
         saver.restore(sess, tf.train.latest_checkpoint(self.save_dir))
       if len(conllu_files) == 1 or output_filename is not None:
         with Timer('Parsing file'):
-          self.parse_file(parseset, parse_outputs, sess, output_dir=output_dir, output_filename=output_filename)
+          if not self.other_save_dirs:
+            self.parse_file(parseset, parse_outputs, sess, output_dir=output_dir, output_filename=output_filename)
+          else:
+            self.parse_file_ensemble(parseset, parse_outputs, sess, saver, output_dir=output_dir, output_filename=output_filename)
       else:
         with Timer('Parsing files'):
           self.parse_files(parseset, parse_outputs, sess, output_dir=output_dir)
@@ -439,10 +349,66 @@ class BaseNetwork(object):
           output_dir = os.path.join(self.save_dir, 'parsed', input_dir)
         elif output_filename is None:
           output_filename = input_filename
+          output_filename = os.path.join(output_dir, output_filename)
         
         if not os.path.exists(output_dir):
           os.makedirs(output_dir)
-        output_filename = os.path.join(output_dir, output_filename)
+        #output_filename = os.path.join(output_dir, output_filename)
+        with codecs.open(output_filename, 'w', encoding='utf-8') as f:
+          graph_outputs.dump_current_predictions(f)
+    if print_time:
+      print('\033[92mParsing 1 file took {:0.1f} seconds\033[0m'.format(time.time() - graph_outputs.time))
+    return
+
+  #=============================================================
+  def parse_file_ensemble(self, dataset, graph_outputs, sess, saver, output_dir=None, output_filename=None, print_time=True):
+    """"""
+
+    probability_tensors = graph_outputs.probabilities
+    input_filename = dataset.conllu_files[0]
+    graph_outputs.restart_timer()
+    collects = []
+    for i, indices in enumerate(dataset.batch_iterator(shuffle=False)):
+      with Timer('Parsing batch %d' % i):
+        tokens, lengths = dataset.get_tokens(indices)
+        feed_dict = dataset.set_placeholders(indices)
+        probabilities = sess.run(probability_tensors, feed_dict=feed_dict)
+        collect = {'indices':indices, 'tokens':tokens, 'lengths':lengths, 'probs':probabilities}
+        collects.append(collect)
+
+    for n, save_dir in enumerate(self.other_save_dirs):
+      print ("### Loading model {} for predicting ###".format(n+1))
+      saver.restore(sess, tf.train.latest_checkpoint(save_dir))
+      for i, collect in enumerate(collects):
+        with Timer('Parsing batch %d' % i):
+          feed_dict = dataset.set_placeholders(collect['indices'])
+          probabilities = sess.run(probability_tensors, feed_dict=feed_dict)
+          for field in probabilities:
+            collect['probs'][field] += probabilities[field]
+
+    for i, collect in enumerate(collects):
+      for field in collect['probs']:
+        collect['probs'][field] /= len(self.other_save_dirs)+1
+      with Timer('Parsing batch %d' % i):
+        predictions = graph_outputs.probs_to_preds(collect['probs'], collect['lengths'])
+        collect['tokens'].update({vocab.field: vocab[predictions[vocab.field]] for vocab in self.output_vocabs})
+        graph_outputs.cache_predictions(collect['tokens'], collect['indices'])
+
+
+    with Timer('Dumping predictions'):
+      if output_dir is None and output_filename is None:
+        graph_outputs.print_current_predictions()
+      else:
+        input_dir, input_filename = os.path.split(input_filename)
+        if output_dir is None:
+          output_dir = os.path.join(self.save_dir, 'parsed', input_dir)
+        elif output_filename is None:
+          output_filename = input_filename
+          output_filename = os.path.join(output_dir, output_filename)
+        
+        if not os.path.exists(output_dir):
+          os.makedirs(output_dir)
+        #output_filename = os.path.join(output_dir, output_filename)
         with codecs.open(output_filename, 'w', encoding='utf-8') as f:
           graph_outputs.dump_current_predictions(f)
     if print_time:
@@ -485,6 +451,111 @@ class BaseNetwork(object):
     return
 
   #=============================================================
+  def parse_wrapper(self, sentences):
+    """"""
+
+    with Timer('Building dataset'):
+      parseset = conllu_dataset.CoNLLUAPI(sentences, self.vocabs,
+                                              config=self._config)
+    factored_deptree = None
+    factored_semgraph = None
+    for vocab in self.output_vocabs:
+      if vocab.field == 'deprel':
+        factored_deptree = vocab.factorized
+      elif vocab.field == 'semrel':
+        factored_semgraph = vocab.factorized
+    with Timer('Building TF'):
+      with tf.variable_scope(self.classname, reuse=False):
+        parse_graph = self.build_graph(reuse=True)
+        parse_outputs = DevOutputs(*parse_graph, load=False, factored_deptree=factored_deptree, factored_semgraph=factored_semgraph, config=self._config)
+      parse_tensors = parse_outputs.accuracies
+      all_variables = set(tf.global_variables())
+      non_save_variables = set(tf.get_collection('non_save_variables'))
+      save_variables = all_variables - non_save_variables
+      saver = tf.train.Saver(list(save_variables), max_to_keep=1)
+
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    config.allow_soft_placement = True
+    with tf.Session(config=config) as sess:
+      with Timer('Initializing non_save variables'):
+        #print(list(non_save_variables))
+        feed_dict = {}
+      if self.use_elmo:
+        feed_dict[self.elmo_vocabs[0].embed_placeholder] = self.elmo_vocabs[0].embeddings
+      if self.use_pretrained:
+        feed_dict[self.pretrained_vocabs[0].embed_placeholder] = self.pretrained_vocabs[0].embeddings
+      sess.run(tf.global_variables_initializer(), feed_dict=feed_dict)
+      with Timer('Restoring save variables'):
+        saver.restore(sess, tf.train.latest_checkpoint(self.save_dir))
+      with Timer('Parsing file'):
+        if not self.other_save_dirs:
+          predictions = self.parse_file_wrapper(parseset, parse_outputs, sess)
+        else:
+          predictions = self.parse_file_ensemble_wrapper(parseset, parse_outputs, sess, saver)
+    return predictions
+
+  #=============================================================
+  def parse_file_wrapper(self, dataset, graph_outputs, sess, print_time=False):
+    """"""
+
+    probability_tensors = graph_outputs.probabilities
+    graph_outputs.restart_timer()
+    for i, indices in enumerate(dataset.batch_iterator(shuffle=False)):
+      with Timer('Parsing batch %d' % i):
+        tokens, lengths = dataset.get_tokens(indices)
+        feed_dict = dataset.set_placeholders(indices)
+        probabilities = sess.run(probability_tensors, feed_dict=feed_dict)
+        predictions = graph_outputs.probs_to_preds(probabilities, lengths)
+        tokens.update({vocab.field: vocab[predictions[vocab.field]] for vocab in self.output_vocabs})
+        graph_outputs.cache_predictions(tokens, indices)
+
+    with Timer('Dumping predictions'):
+      predictions_ = graph_outputs.get_current_predictions()
+    if print_time:
+      print('\033[92mParsing 1 file took {:0.1f} seconds\033[0m'.format(time.time() - graph_outputs.time))
+    return predictions_
+
+  #=============================================================
+  def parse_file_ensemble_wrapper(self, dataset, graph_outputs, sess, saver, print_time=False):
+    """"""
+
+    probability_tensors = graph_outputs.probabilities
+    graph_outputs.restart_timer()
+    collects = []
+    for i, indices in enumerate(dataset.batch_iterator(shuffle=False)):
+      with Timer('Parsing batch %d (Main Model)' % i):
+        tokens, lengths = dataset.get_tokens(indices)
+        feed_dict = dataset.set_placeholders(indices)
+        probabilities = sess.run(probability_tensors, feed_dict=feed_dict)
+        collect = {'indices':indices, 'tokens':tokens, 'lengths':lengths, 'probs':probabilities}
+        collects.append(collect)
+
+    for n, save_dir in enumerate(self.other_save_dirs):
+      #print ("### Loading model {} for predicting ###".format(n+1))
+      saver.restore(sess, tf.train.latest_checkpoint(save_dir))
+      for i, collect in enumerate(collects):
+        with Timer('Parsing batch %d (Other Model %d)' % (i, n+1)):
+          feed_dict = dataset.set_placeholders(collect['indices'])
+          probabilities = sess.run(probability_tensors, feed_dict=feed_dict)
+          for field in probabilities:
+            collect['probs'][field] += probabilities[field]
+
+    for i, collect in enumerate(collects):
+      for field in collect['probs']:
+        collect['probs'][field] /= len(self.other_save_dirs)+1
+      with Timer('Collecting batch %d' % i):
+        predictions = graph_outputs.probs_to_preds(collect['probs'], collect['lengths'])
+        collect['tokens'].update({vocab.field: vocab[predictions[vocab.field]] for vocab in self.output_vocabs})
+        graph_outputs.cache_predictions(collect['tokens'], collect['indices'])
+
+    with Timer('Dumping predictions'):
+      predictions_ = graph_outputs.get_current_predictions()
+    if print_time:
+      print('\033[92mParsing 1 file took {:0.1f} seconds\033[0m'.format(time.time() - graph_outputs.time))
+    return predictions_
+
+  #=============================================================
   def get_input_tensor(self, outputs, reuse=True):
     """"""
 
@@ -509,6 +580,15 @@ class BaseNetwork(object):
   @property
   def save_dir(self):
     return self._config.getstr(self, 'save_dir')
+  @property
+  def other_save_dirs(self):
+    return self._config.getlist(self, 'other_save_dirs')
+  @property
+  def use_pretrained(self):
+    return self._use_pretrained
+  @property
+  def use_elmo(self):
+    return self._use_elmo
   @property
   def vocabs(self):
     return self._vocabs

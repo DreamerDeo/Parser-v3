@@ -58,12 +58,12 @@ def chuliu_edmonds(scores):
   scores *= (1-np.eye(scores.shape[0]))
   scores[0] = 0
   scores[0,0] = 1
-  scores = np.log(scores)
-  
+  #scores = np.log(scores+1e-10)
+  scores = np.exp(scores) / np.exp(scores).sum()
   tree = np.argmax(scores, axis=1)
   cycles = tarjan(tree)
-  #print(scores)
-  #print(cycles)
+  print('scores:',scores)
+  print('cycles:',cycles)
   if not cycles:
     return tree
   else:
@@ -157,7 +157,8 @@ def chuliu_edmonds_one_root(scores):
     scores[1:,0] = 0
     scores[root] = 0
     scores[root,0] = 1
-    scores = np.log(scores)
+    #scores = np.log(scores)
+    #scores = np.exp(scores) / np.exp(scores).sum()
     return scores, root_score
   #-------------------------------------------------------------
 
@@ -180,17 +181,19 @@ def chuliu_edmonds_one_root(scores):
   return best_tree
   
 #***************************************************************
-def main(n=10):
+def main(n=20):
   """"""
   
   for i in range(100):
     scores = np.random.randn(n,n)
     scores = np.exp(scores) / np.exp(scores).sum()
     scores *= (1-np.eye(n))
+    #print (scores)
     newtree = chuliu_edmonds_one_root(scores)
     cycles = tarjan(newtree)
     roots = np.where(np.equal(newtree[1:], 0))[0]+1
     print(newtree, cycles, roots)
+    print (scores)
     assert not cycles
     assert len(roots) == 1
   return
