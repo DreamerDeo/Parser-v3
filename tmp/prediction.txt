@@ -1,0 +1,53 @@
+1	我	_	PN	_	_	_	_	6:3_Agt	_
+2	爱	_	VV	_	_	_	_	6:3_Agt	_
+3	他	_	PN	_	_	_	_	6:3_mDepd	_
+4	有	_	VE	_	_	_	_	6:3_mDepd	_
+5	志气	_	NN	_	_	_	_	6:3_mPunc	_
+6	。	_	PU	_	_	_	_	0:3_mPunc	_
+
+1	我	_	PN	_	_	_	_	9:3_Agt	_
+2	一定	_	AD	_	_	_	_	9:3_mDepd	_
+3	在	_	P	_	_	_	_	9:3_mDepd	_
+4	九点	_	NT	_	_	_	_	9:3_mDepd	_
+5	以前	_	LC	_	_	_	_	9:3_mDepd	_
+6	把	_	BA	_	_	_	_	9:3_mDepd	_
+7	文件	_	NN	_	_	_	_	9:3_mDepd	_
+8	送到	_	VV	_	_	_	_	9:3_mPunc	_
+9	。	_	PU	_	_	_	_	0:3_mPunc	_
+
+1	当时	_	NT	_	_	_	_	19:3_mDepd	_
+2	的	_	DEG	_	_	_	_	19:3_mDepd	_
+3	巴西	_	NR	_	_	_	_	19:3_mDepd	_
+4	总统	_	NN	_	_	_	_	19:3_mDepd	_
+5	菲格雷特	_	NR	_	_	_	_	19:3_mDepd	_
+6	穿	_	VV	_	_	_	_	19:3_mDepd	_
+7	着	_	AS	_	_	_	_	19:3_mDepd	_
+8	黑色	_	JJ	_	_	_	_	19:3_mDepd	_
+9	礼服	_	NN	_	_	_	_	19:3_mDepd	_
+10	，	_	PU	_	_	_	_	19:3_mDepd	_
+11	亲自	_	AD	_	_	_	_	19:3_mDepd	_
+12	主持	_	VV	_	_	_	_	19:3_mDepd	_
+13	了	_	AS	_	_	_	_	19:3_mDepd	_
+14	这	_	DT	_	_	_	_	19:3_mDepd	_
+15	个	_	M	_	_	_	_	19:3_mDepd	_
+16	特殊	_	VA	_	_	_	_	19:3_mDepd	_
+17	的	_	DEC	_	_	_	_	19:3_mDepd	_
+18	葬礼	_	NN	_	_	_	_	19:3_mPunc	_
+19	。	_	PU	_	_	_	_	0:3_mPunc	_
+
+1	明天	_	NT	_	_	_	_	7:3_Agt	_
+2	我	_	PN	_	_	_	_	7:3_Agt	_
+3	将	_	AD	_	_	_	_	7:3_Agt	_
+4	去	_	VV	_	_	_	_	7:3_mDepd	_
+5	看	_	VV	_	_	_	_	7:3_mDepd	_
+6	他	_	PN	_	_	_	_	7:3_mPunc	_
+7	。	_	PU	_	_	_	_	0:3_mPunc	_
+
+1	别	_	AD	_	_	_	_	7:3_Agt	_
+2	用	_	VV	_	_	_	_	7:3_mDepd	_
+3	那	_	DT	_	_	_	_	7:3_mDepd	_
+4	支	_	M	_	_	_	_	7:3_mDepd	_
+5	铅笔	_	NN	_	_	_	_	7:3_mDepd	_
+6	写	_	VV	_	_	_	_	7:3_mPunc	_
+7	。	_	PU	_	_	_	_	0:3_mPunc	_
+
